@@ -1,23 +1,21 @@
-## Current development going on here :arrow_right: [Development Branch](https://github.com/tzapu/WiFiManager/tree/development)
+### This repository is forked from :arrow_right: [tzapu/WiFiManager](https://github.com/tzapu/WiFiManager/) and add support to ESP32 boards
 
-# WiFiManager
-ESP8266 WiFi Connection manager with fallback web configuration portal
+# ESP32WiFiManager
+ESP32 WiFi Connection manager with fallback web configuration portal
 
 [![Build Status](https://travis-ci.org/tzapu/WiFiManager.svg?branch=master)](https://travis-ci.org/tzapu/WiFiManager)
 
 The configuration portal is of the captive variety, so on various devices it will present the configuration dialogue as soon as you connect to the created access point.
 
-First attempt at a library. Lots more changes and fixes to do. Contributions are welcome.
 
-#### This works with the ESP8266 Arduino platform with a recent stable release(2.0.0 or newer) https://github.com/esp8266/Arduino
+#### This works with the [Espressif ESP32 Arduino platform](https://github.com/espressif/arduino-esp32) and the rebranded library [ESP32WebServer](https://github.com/nhatuan84/esp32-webserver)
 
 ## Contents
  - [How it works](#how-it-works)
  - [Wishlist](#wishlist)
  - [Quick start](#quick-start)
-   - Installing
-     - [Through Library Manager](#install-through-library-manager)
-     - [From Github](#checkout-from-github)
+  - [Dependencies](#dependencies)
+   - [Installing from Github](#installing)
    - [Using](#using)
  - [Documentation](#documentation)
    - [Access Point Password](#password-protect-the-configuration-access-point)
@@ -42,7 +40,7 @@ First attempt at a library. Lots more changes and fixes to do. Contributions are
 - ESP will try to connect. If successful, it relinquishes control back to your app. If not, reconnect to AP and reconfigure.
 
 ## How It Looks
-![ESP8266 WiFi Captive Portal Homepage](http://i.imgur.com/YPvW9eql.png) ![ESP8266 WiFi Captive Portal Configuration](http://i.imgur.com/oicWJ4gl.png)
+![ESP32 WiFi Captive Portal Homepage](http://i.imgur.com/YPvW9eql.png) ![ESP32 WiFi Captive Portal Configuration](http://i.imgur.com/oicWJ4gl.png)
 
 ## Wishlist
 - [x] remove dependency on EEPROM library
@@ -61,31 +59,24 @@ First attempt at a library. Lots more changes and fixes to do. Contributions are
 
 ## Quick Start
 
+### Dependencies
+
+- __[ESP32 core for Arduino](https://github.com/espressif/arduino-esp32)__
+- __[ESP32WebServer](https://github.com/nhatuan84/esp32-webserver)__
+
 ### Installing
-You can either install through the Arduino Library Manager or checkout the latest changes or a release from github
 
-#### Install through Library Manager
-__Currently version 0.8+ works with release 2.0.0 or newer of the [ESP8266 core for Arduino](https://github.com/esp8266/Arduino)__
- - in Arduino IDE got to Sketch/Include Library/Manage Libraries
-  ![Manage Libraries](http://i.imgur.com/9BkEBkR.png)
-
- - search for WiFiManager
-  ![WiFiManager package](http://i.imgur.com/18yIai8.png)
-
- - click Install and start [using it](#using)
-
-####  Checkout from github
-__Github version works with release 2.0.0 or newer of the [ESP8266 core for Arduino](https://github.com/esp8266/Arduino)__
-- Checkout library to your Arduino libraries folder
+- Checkout from github
+- Install dependencies
 
 ### Using
 - Include in your sketch
 ```cpp
-#include <ESP8266WiFi.h>          //ESP8266 Core WiFi Library (you most likely already have this in your sketch)
+#include <WiFi.h>          //ESP32 Core WiFi Library (you most likely already have this in your sketch)
 
 #include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
-#include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
-#include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
+#include <ESP32WebServer.h>     //WebServer rebranded Librairy from https://github.com/nhatuan84/esp32-webserver
+#include <WiFiManager.h>          //https://github.com/hraph/ESP32WiFiManager/ WiFi Configuration Magic
 ```
 
 - Initialize library, in your setup function add
@@ -110,7 +101,7 @@ wifiManager.autoConnect();
 After you write your sketch and start the ESP, it will try to connect to WiFi. If it fails it starts in Access Point mode.
 While in AP mode, connect to it then open a browser to the gateway IP, default 192.168.4.1, configure wifi, save and it should reboot and connect.
 
-Also see [examples](https://github.com/tzapu/WiFiManager/tree/master/examples).
+Also see [examples](https://github.com/hraph/ESP32WiFiManager/tree/master/examples).
 
 ## Documentation
 
@@ -142,7 +133,7 @@ void configModeCallback (WiFiManager *myWiFiManager) {
 ##### Save settings
 This gets called when custom parameters have been set **AND** a connection has been established. Use it to set a flag, so when all the configuration finishes, you can save the extra parameters somewhere.
 
-See [AutoConnectWithFSParameters Example](https://github.com/tzapu/WiFiManager/tree/master/examples/AutoConnectWithFSParameters).
+See [AutoConnectWithFSParameters Example](https://github.com/hraph/ESP32WiFiManager/tree/master/examples/AutoConnectWithFSParameters).
 ```cpp
 wifiManager.setSaveConfigCallback(saveConfigCallback);
 ```
@@ -182,7 +173,7 @@ void loop() {
   }
 }
 ```
-See example for a more complex version. [OnDemandConfigPortal](https://github.com/tzapu/WiFiManager/tree/master/examples/OnDemandConfigPortal)
+See example for a more complex version. [OnDemandConfigPortal](https://github.com/hraph/ESP32WiFiManager/tree/master/examples/OnDemandConfigPortal)
 
 #### Custom Parameters
 You can use WiFiManager to collect more parameters than just SSID and password.
@@ -206,7 +197,7 @@ Usage scenario would be:
 This feature is a lot more involved than all the others, so here are some examples to fully show how it is done.
 You should also take a look at adding custom HTML to your form.
 
-- Save and load custom parameters to file system in json form [AutoConnectWithFSParameters](https://github.com/tzapu/WiFiManager/tree/master/examples/AutoConnectWithFSParameters)
+- Save and load custom parameters to file system in json form [AutoConnectWithFSParameters](https://github.com/hraph/ESP32WiFiManager/tree/master/examples/AutoConnectWithFSParameters)
 - *Save and load custom parameters to EEPROM* (not done yet)
 
 #### Custom IP Configuration
@@ -267,11 +258,11 @@ wifiManager.setDebugOutput(false);
 ```
 
 ## Troubleshooting
-If you get compilation errors, more often than not, you may need to install a newer version of the ESP8266 core for Arduino.
+If you get compilation errors, more often than not, you may need to install a newer version of the ESP32 core for Arduino.
 
-Changes added on 0.8 should make the latest trunk work without compilation errors. Tested down to ESP8266 core 2.0.0. **Please update to version 0.8**
+Changes added on 0.8 should make the latest trunk work without compilation errors. Tested down to ESP32 core 2.0.0. **Please update to version 0.8**
 
-I am trying to keep releases working with release versions of the core, so they can be installed through boards manager, but if you checkout the latest version directly from github, sometimes, the library will only work if you update the ESP8266 core to the latest version because I am using some newly added function.
+I am trying to keep releases working with release versions of the core, so they can be installed through boards manager, but if you checkout the latest version directly from github, sometimes, the library will only work if you update the ESP32 core to the latest version because I am using some newly added function.
 
 If you connect to the created configuration Access Point but the configuration portal does not show up, just open a browser and type in the IP of the web portal, by default `192.168.4.1`.
 
@@ -300,7 +291,7 @@ If trying to connect ends up in an endless loop, try to add `setConnectTimeout(6
  - fixed support for encoded characters in ssid/pass
 
 ##### 0.8
- - made it compile on older versions of ESP8266 core as well, tested down to 2.0.0
+ - made it compile on older versions of ESP32 core as well, tested down to 2.0.0
  - added simple example for Custom IP
 
 ##### 0.7
@@ -326,7 +317,7 @@ If trying to connect ends up in an endless loop, try to add `setConnectTimeout(6
  - memory allocation improvements
 
 ##### v0.3
- - removed the need for EEPROM and works with the 2.0.0 and above stable release of the ESP8266 for Arduino IDE package
+ - removed the need for EEPROM and works with the 2.0.0 and above stable release of the ESP32 for Arduino IDE package
  - removed restart on save of credentials
  - updated examples
 
@@ -334,41 +325,9 @@ If trying to connect ends up in an endless loop, try to add `setConnectTimeout(6
 needs the latest staging version (or at least a recent release of the staging version) to work
 
 ##### v0.1
-works with the staging release ver. 1.6.5-1044-g170995a, built on Aug 10, 2015 of the ESP8266 Arduino library.
+works with the staging release ver. 1.6.5-1044-g170995a, built on Aug 10, 2015 of the ESP32 Arduino library.
 
 
 ### Contributions and thanks
-The support and help I got from the community has been nothing short of phenomenal. I can't thank you guys enough. This is my first real attept in developing open source stuff and I must say, now I understand why people are so dedicated to it, it is because of all the wonderful people involved.
 
-__THANK YOU__
-
-[Shawn A](https://github.com/tablatronix)
-
-[Maximiliano Duarte](https://github.com/domonetic)
-
-[alltheblinkythings](https://github.com/alltheblinkythings)
-
-[Niklas Wall](https://github.com/niklaswall)
-
-[Jakub Piasecki](https://github.com/zaporylie)
-
-[Peter Allan](https://github.com/alwynallan)
-
-[John Little](https://github.com/j0hnlittle)
-
-[markaswift](https://github.com/markaswift)
-
-[franklinvv](https://github.com/franklinvv)
-
-[Alberto Ricci Bitti](https://github.com/riccibitti)
-
-[SebiPanther](https://github.com/SebiPanther)
-
-[jonathanendersby](https://github.com/jonathanendersby)
-
-[walthercarsten](https://github.com/walthercarsten)
-
-Sorry if i have missed anyone.
-
-#### Inspiration
-- http://www.esp8266.com/viewtopic.php?f=29&t=2520
+The author [tzapu](https://github.com/tzapu/).
