@@ -106,7 +106,7 @@ bool WiFiManager::addParameter(WiFiManagerParameter *p) {
 
 void WiFiManager::setupConfigPortal() {
   dnsServer.reset(new DNSServer());
-  server.reset(new ESP8266WebServer(80));
+  server.reset(new ESP32WebServer(80));
 
   DEBUG_WM(F(""));
   _configPortalStart = millis();
