@@ -76,7 +76,6 @@ void sendWavFile(const char* filePath) {
   client.println(String("POST ") + endpoint + " HTTP/1.1");
   client.println(String("Host: ") + server);
   client.println("Content-Type: multipart/form-data; boundary=" + boundary);
-  client.println("Content-Length: " + String(contentLength + boundary.length() + 44)); // Approximate calculation
   client.println("Connection: close");
   client.println();
 
@@ -96,14 +95,37 @@ void sendWavFile(const char* filePath) {
   // Close the input file
   wavFile.close();
 
-  // Read the server response
-  Serial.println("Server response:");
-  while (client.connected() || client.available()) {
-    String line = client.readStringUntil('\n');
-    Serial.println(line);
+  // Save the returned .wav file to the SD card
+  saveResponseToFile();
+}
+
+void saveResponseToFile() {
+  File outFile = SD.open("/output.wav", FILE_WRITE);
+  if (!outFile) {
+    Serial.println("Failed to open output file.");
+    return;
   }
 
-  client.stop();
+  Serial.println("Saving response to SD card...");
+  bool headersEnded = false;
+
+  while (client.connected() || client.available()) {
+    String line = client.readStringUntil('\n');
+
+    // Detect end of headers
+    if (!headersEnded && line == "\r") {
+      headersEnded = true;
+      continue;
+    }
+
+    // Save body content to file
+    if (headersEnded) {
+      outFile.write((uint8_t*)line.c_str(), line.length());
+    }
+  }
+
+  outFile.close();
+  Serial.println("Response saved to /output.wav");
 }
 
 void loop() {
