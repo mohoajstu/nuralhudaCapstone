@@ -11,7 +11,7 @@ const char* password = "password";
 
 // API endpoint
 const char* server = "api.openai.com";
-const char* apiKey = "key";
+// const char* apiKey = "key";
 
 const char* openai_cert = R"EOF(
 -----BEGIN CERTIFICATE-----
