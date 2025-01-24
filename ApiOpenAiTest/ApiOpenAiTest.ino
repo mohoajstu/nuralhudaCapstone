@@ -6,12 +6,12 @@
 #include <ArduinoJson.h>
 
 // WiFi credentials
-const char* ssid = "TELUS7097-2.4G";
-const char* password = "z525kv87f2";
+const char* ssid = "password";
+const char* password = "password";
 
 // API endpoint
 const char* server = "api.openai.com";
-const char* apiKey = "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";
+const char* apiKey = "key";
 
 const char* openai_cert = R"EOF(
 -----BEGIN CERTIFICATE-----
