@@ -1,133 +1,70 @@
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <SD.h>
+/*
+ https://www.electronicwings.com/
+  SD Card Interface code for ESP32
+  SPI Pins of ESP32 SD card as follows:
+  CS    = 5;
+  MOSI  = 23;
+  MISO  = 19;
+  SCK   = 18; 
+*/
+
 #include <SPI.h>
+#include <SD.h>
 
-// Wi-Fi credentials
-const char* ssid = "Your_SSID";
-const char* password = "Your_PASSWORD";
+File myFile;
+const int CS = 5;
 
-// HTTPS server details
-const char* server = "example.com"; // Replace with your server domain
-const int port = 443;              // HTTPS port
-const char* endpoint = "/upload";  // Endpoint to upload the file
+void WriteFile(const char * path, const char * message){
+  // open the file. note that only one file can be open at a time,
+  // so you have to close this one before opening another.
+  myFile = SD.open(path, FILE_WRITE);
+  // if the file opened okay, write to it:
+  if (myFile) {
+    Serial.printf("Writing to %s ", path);
+    myFile.println(message);
+    myFile.close(); // close the file:
+    Serial.println("completed.");
+  } 
+  // if the file didn't open, print an error:
+  else {
+    Serial.println("error opening file ");
+    Serial.println(path);
+  }
+}
 
-// Root CA certificate (PEM format)
-const char* root_ca = R"EOF(
------BEGIN CERTIFICATE-----
-YOUR_SERVER_ROOT_CA_CERTIFICATE_HERE
------END CERTIFICATE-----
-)EOF";
 
-// SD card settings
-#define SD_CS 5 // Chip select pin for SD card (adjust based on your ESP32)
-
-WiFiClientSecure client;
+void ReadFile(const char * path){
+  // open the file for reading:
+  myFile = SD.open(path);
+  if (myFile) {
+     Serial.printf("Reading file from %s\n", path);
+     // read from the file until there's nothing else in it:
+    while (myFile.available()) {
+      Serial.write(myFile.read());
+    }
+    myFile.close(); // close the file:
+  } 
+  else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening test.txt");
+  }
+}
 
 void setup() {
-  Serial.begin(115200);
-  delay(1000);
-
-  // Connect to Wi-Fi
-  Serial.print("Connecting to Wi-Fi");
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.print(".");
-  }
-  Serial.println("\nConnected to Wi-Fi");
-
-  // Initialize SD card
-  if (!SD.begin(SD_CS)) {
-    Serial.println("SD card initialization failed!");
+  Serial.begin(115200);    // Set serial baud rate to 9600
+  delay(500);
+  while (!Serial) { ; }  // wait for serial port to connect. Needed for native USB port only
+  Serial.println("Initializing SD card...");
+  if (!SD.begin(CS)) {
+    Serial.println("initialization failed!");
     return;
   }
-  Serial.println("SD card initialized.");
+  Serial.println("initialization done.");
 
-  // Configure WiFiClientSecure
-  client.setCACert(root_ca);
-
-  // Send the `.wav` file
-  sendWavFile("/input.wav");
-}
-
-void sendWavFile(const char* filePath) {
-  // Open the .wav file on the SD card
-  File wavFile = SD.open(filePath, FILE_READ);
-  if (!wavFile) {
-    Serial.println("Failed to open input file.");
-    return;
-  }
-
-  // Connect to the HTTPS server
-  if (!client.connect(server, port)) {
-    Serial.println("Failed to connect to server.");
-    wavFile.close();
-    return;
-  }
-  Serial.println("Connected to the server.");
-
-  // Prepare HTTP POST headers
-  String boundary = "----ESP32Boundary";
-  String contentType = "audio/wav";
-  String contentDisposition = "Content-Disposition: form-data; name=\"file\"; filename=\"input.wav\"";
-  size_t contentLength = wavFile.size();
-
-  client.println(String("POST ") + endpoint + " HTTP/1.1");
-  client.println(String("Host: ") + server);
-  client.println("Content-Type: multipart/form-data; boundary=" + boundary);
-  client.println("Connection: close");
-  client.println();
-
-  // Write POST body
-  client.println("--" + boundary);
-  client.println(contentDisposition);
-  client.println("Content-Type: " + contentType);
-  client.println();
-
-  // Stream file contents
-  while (wavFile.available()) {
-    client.write(wavFile.read());
-  }
-  client.println();
-  client.println("--" + boundary + "--");
-
-  // Close the input file
-  wavFile.close();
-
-  // Save the returned .wav file to the SD card
-  saveResponseToFile();
-}
-
-void saveResponseToFile() {
-  File outFile = SD.open("/output.wav", FILE_WRITE);
-  if (!outFile) {
-    Serial.println("Failed to open output file.");
-    return;
-  }
-
-  Serial.println("Saving response to SD card...");
-  bool headersEnded = false;
-
-  while (client.connected() || client.available()) {
-    String line = client.readStringUntil('\n');
-
-    // Detect end of headers
-    if (!headersEnded && line == "\r") {
-      headersEnded = true;
-      continue;
-    }
-
-    // Save body content to file
-    if (headersEnded) {
-      outFile.write((uint8_t*)line.c_str(), line.length());
-    }
-  }
-
-  outFile.close();
-  Serial.println("Response saved to /output.wav");
+  WriteFile("/test.txt", "ElectronicWings.com");
+  ReadFile("/test.txt");
 }
 
 void loop() {
-  // Nothing to do here
+  // nothing happens after setup
 }
