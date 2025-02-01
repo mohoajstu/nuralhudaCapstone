@@ -16,22 +16,22 @@ AsyncWebServer server(80);
 // Search for parameter in HTTP POST request
 const char* PARAM_INPUT_1 = "ssid";
 const char* PARAM_INPUT_2 = "pass";
-const char* PARAM_INPUT_3 = "ip";
-const char* PARAM_INPUT_4 = "gateway";
+// const char* PARAM_INPUT_3 = "ip";
+// const char* PARAM_INPUT_4 = "gateway";
 
 //Variables to save values from HTML form
-String ssid;
-String pass;
-String ip;
-String gateway;
+String ssid = "";
+String pass = "";
+// String ip;
+// String gateway;
 
 // File paths to save input values permanently
 const char* ssidPath = "/ssid.txt";
 const char* passPath = "/pass.txt";
-const char* ipPath = "/ip.txt";
-const char* gatewayPath = "/gateway.txt";
+// const char* ipPath = "/ip.txt";
+// const char* gatewayPath = "/gateway.txt";
 
-IPAddress localIP;
+// IPAddress localIP;
 //IPAddress localIP(192, 168, 1, 200); // hardcoded
 
 // Set your Gateway IP address
@@ -93,34 +93,32 @@ void writeFile(fs::FS &fs, const char * path, const char * message){
 
 // Initialize WiFi
 bool initWiFi() {
-  if(ssid=="" || ip==""){
-    Serial.println("Undefined SSID or IP address.");
+  if(ssid==""){
+    Serial.println("Undefined SSID");
     return false;
   }
 
-  WiFi.mode(WIFI_STA);
-  localIP.fromString(ip.c_str());
-  localGateway.fromString(gateway.c_str());
+  // WiFi.mode(WIFI_STA);
+  // localIP.fromString(ip.c_str());
+  // localGateway.fromString(gateway.c_str());
 
-
-  if (!WiFi.config(localIP, localGateway, subnet)){
-    Serial.println("STA Failed to configure");
-    return false;
-  }
+  // if (!WiFi.config(localIP, localGateway, subnet)){
+  //   Serial.println("STA Failed to configure");
+  //   return false;
+  // }
   WiFi.begin(ssid.c_str(), pass.c_str());
-  Serial.println("Connecting to WiFi...");
-
-  unsigned long currentMillis = millis();
-  previousMillis = currentMillis;
-
-  while(WiFi.status() != WL_CONNECTED) {
-    currentMillis = millis();
-    if (currentMillis - previousMillis >= interval) {
-      Serial.println("Failed to connect.");
+  // Attempt to connect to WiFi network:
+  unsigned long startMillis = millis();
+  while (WiFi.status() != WL_CONNECTED) {
+    if (millis() - startMillis > 10000) { // 10-second timeout
+      Serial.println("WiFi connection failed!");
       return false;
     }
+    delay(500);
+    Serial.print(".");
   }
 
+  Serial.println("Connected to WiFi!");
   Serial.println(WiFi.localIP());
   return true;
 }
@@ -152,12 +150,12 @@ void setup() {
   // Load values saved in LittleFS
   ssid = readFile(LittleFS, ssidPath);
   pass = readFile(LittleFS, passPath);
-  ip = readFile(LittleFS, ipPath);
-  gateway = readFile (LittleFS, gatewayPath);
+  // ip = readFile(LittleFS, ipPath);
+  // gateway = readFile (LittleFS, gatewayPath);
   Serial.println(ssid);
   Serial.println(pass);
-  Serial.println(ip);
-  Serial.println(gateway);
+  // Serial.println(ip);
+  // Serial.println(gateway);
 
   if(initWiFi()) {
     // Route for root / web page
@@ -218,25 +216,25 @@ void setup() {
             writeFile(LittleFS, passPath, pass.c_str());
           }
           // HTTP POST ip value
-          if (p->name() == PARAM_INPUT_3) {
-            ip = p->value().c_str();
-            Serial.print("IP Address set to: ");
-            Serial.println(ip);
-            // Write file to save value
-            writeFile(LittleFS, ipPath, ip.c_str());
-          }
+          // if (p->name() == PARAM_INPUT_3) {
+          //   ip = p->value().c_str();
+          //   Serial.print("IP Address set to: ");
+          //   Serial.println(ip);
+          //   // Write file to save value
+          //   writeFile(LittleFS, ipPath, ip.c_str());
+          // }
           // HTTP POST gateway value
-          if (p->name() == PARAM_INPUT_4) {
-            gateway = p->value().c_str();
-            Serial.print("Gateway set to: ");
-            Serial.println(gateway);
-            // Write file to save value
-            writeFile(LittleFS, gatewayPath, gateway.c_str());
-          }
+          // if (p->name() == PARAM_INPUT_4) {
+          //   gateway = p->value().c_str();
+          //   Serial.print("Gateway set to: ");
+          //   Serial.println(gateway);
+          //   // Write file to save value
+          //   writeFile(LittleFS, gatewayPath, gateway.c_str());
+          // }
           //Serial.printf("POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
         }
       }
-      request->send(200, "text/plain", "Done. ESP will restart, connect to your router and go to IP address: " + ip);
+      request->send(200, "text/plain", "Done. ESP will restart, connect to your router");
       delay(3000);
       ESP.restart();
     });
