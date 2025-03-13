@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "test": "mocha",
-    "start": "nodemon ./server.mjs localhost 8080"
+    "start": "nodemon ./server.mjs localhost 3000"
   },
   "author": "",
   "license": "ISC",

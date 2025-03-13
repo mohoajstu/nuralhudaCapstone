@@ -35,6 +35,8 @@ describe("POST /process-audio endpoint", function () {
           expect(res.body).to.be.instanceof(Buffer);
           expect(res.body.length).to.be.greaterThan(0);
 
+          // console.log(res);
+
           // Save the received MP3 response to output.mp3
           fs.writeFile(outputFilePath, res.body, (err) => {
             if (err) return done(err);

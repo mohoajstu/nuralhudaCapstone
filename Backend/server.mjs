@@ -8,6 +8,17 @@ import 'dotenv/config';
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Logging middleware to print all accesses
+app.use((req, res, next) => {
+  console.log(`Accessed route: ${req.method} ${req.url}`);
+  next();
+});
+
+// Root debug endpoint
+app.get('/', (req, res) => {
+  res.send(`Debug: Server is up and running on port ${port}`);
+});
+
 // Use raw middleware to parse incoming MP3 binary data
 app.use('/process-audio', express.raw({ type: 'audio/wav', limit: '50mb' }));
 
@@ -25,7 +36,7 @@ app.post('/process-audio', async (req, res) => {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-audio-preview',
       modalities: ['text', 'audio'],
-      audio: { voice: 'alloy', format: 'wav' },
+      audio: { voice: 'alloy', format: 'mp3' },
       messages: [
         {
           role: 'user',
@@ -65,15 +76,12 @@ app.post('/process-audio', async (req, res) => {
       console.log('Audio file saved to', outputFilePath);
     });
 
-    // Set headers for an MP3 response
-    res.setHeader('Content-Type', 'audio/mpeg');
+    // Set correct headers for MP3 or WAV based on actual format
+    res.setHeader('Content-Type', 'audio/mpeg'); // Adjust to 'audio/wav' if necessary
+    res.setHeader('Content-Length', audioBufferFromResponse.length);
 
-    // Stream the audio buffer in chunks
-    const chunkSize = 1024; // 1KB chunks
-    for (let i = 0; i < audioBufferFromResponse.length; i += chunkSize) {
-      res.write(audioBufferFromResponse.slice(i, i + chunkSize));
-    }
-    res.end();
+    // Send the entire buffer as the response
+    res.end(audioBufferFromResponse);
   } catch (error) {
     console.error('Error processing audio:', error);
     res.status(500).send('Error processing audio');
