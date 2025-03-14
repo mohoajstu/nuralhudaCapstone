@@ -15,6 +15,31 @@
 #include <AudioTools.h>
 #include "AudioTools/AudioCodecs/CodecMP3Helix.h"
 
+// SD Card----------------------------
+#define SD_CS      5
+#define SPI_MOSI  23
+#define SPI_MISO  19
+#define SPI_SCK   18
+
+// microphone ---------------------
+#define BUTTON_PIN 33
+#define MICROPHONE_BCK 14
+#define MICROPHONE_WS 15
+#define MICROPHONE_RX 21
+
+// I2S amplifier / DAC
+#define I2S_DOUT  22
+#define I2S_BCLK  26
+#define I2S_LRC   25
+
+// State Machine 
+#define STATE_RESET 0
+#define STATE_IDLE 1
+#define STATE_RECORD 2
+#define STATE_AI 3
+#define STATE_PLAY 4
+#define STATE_PLAYING 5
+
 // WIFI----------------
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
@@ -30,66 +55,54 @@ String pass = "";
 // File paths to save input values permanently
 const char* ssidPath = "/ssid.txt";
 const char* passPath = "/pass.txt";
-
-// Timer variables
-unsigned long previousMillis = 0;
-const long interval = 20000;  // interval to wait for Wi-Fi connection (milliseconds)
-
 // WiFi End----------------------------
 
-// SD Card----------------------------
-#define SD_CS      5
-#define SPI_MOSI  23
-#define SPI_MISO  19
-#define SPI_SCK   18
-// SD Card End-----------------------
-
 // Open Ai---------------------------
+WiFiClient client;
 // API endpoint
-const char* serverUrl = "http://your_local_server/process-audio";
+// #define serverUrl "http://165.227.41.139:3001/process-audio"
+// #define SERVER_IP "165.227.41.139"
+// #define SERVER_PORT 3001
+#define serverUrl "http://192.168.137.1:3000/process-audio"
+#define SERVER_IP "192.168.137.1"
+#define SERVER_PORT 3000
 // Open AI End-----------------------
-
-// Audio Start-----------------------------
-// I2S amplifier / DAC
-#define I2S_DOUT  22
-#define I2S_BCLK  26
-#define I2S_LRC   25
-
-
-// Audio End-------------------------------
 
 // Recording Start----------------------------
 I2SStream i2sStream;  // Access I2S as stream
-
 File audioFile;  // final output stream
 WAVEncoder encoder;
-
 EncodedAudioStream out_stream(&audioFile, &encoder);  // encode as wav file
 StreamCopy copier(out_stream, i2sStream);        
+bool isRecording = false;
+// Recording End---------------------------
 
-const unsigned long recordDuration = 5000; 
-
+// Amplifier
 I2SStream i2s;
 AudioInfo info(22050, 1, 16);
 EncodedAudioStream decoder(&i2s, new MP3DecoderHelix()); // Decoding stream
 StreamCopy OutputCopier; 
 File playFile;
 bool playbackInitialized = false;  // Ensure playback is only initialized once
-// Recording End---------------------------
 
-// State Machine --------------------------
-#define STATE_RESET 0
-#define STATE_IDLE 1
-#define STATE_RECORD 2
-#define STATE_AI 3
-#define STATE_PLAY 4
-#define STATE_PLAYING 5
+// Global flags for AI request task
+volatile bool aiRequestComplete = false;
+volatile bool aiRequestSuccess = false;
+bool waitingPlaybackInitialized = false;
 
-int state = 0;
+// Waiting playback objects (plays "/waiting.mp3")
+File waitingFile;
+I2SStream waitingI2S;
+AudioInfo waitingInfo(22050, 1, 16);
+EncodedAudioStream waitingDecoder(&waitingI2S, new MP3DecoderHelix());
+StreamCopy waitingOutputCopier;
+
+// --- State Machine variable ---
+int state = STATE_IDLE;
+// Amplifier End
 // State Machine End -----------------------
 
 // Wifi----------------------------------
-// Initialize WiFi
 bool initWiFi() {
   if(ssid==""){
     Serial.println("Undefined SSID");
@@ -114,9 +127,9 @@ bool initWiFi() {
 }
 
 // Replaces placeholder with LED state value
-String processor(const String& var) {
-  return String();
-}
+// String processor(const String& var) {
+//   return String();
+// }
 // Wifi End---------------------------------
 
 // SD----------------------------------------------
@@ -171,67 +184,139 @@ void writeFile(const char* path, const char* message) {
 
 // open ai -------------------------------------------------
 bool processAIRequest() {
-  // Open the audio file from SD card
-  File audioFile = SD.open("/recording.wav", FILE_READ);
-  if (!audioFile) {
+  Serial.println("Start Process AI Request");
+
+  // Open audio file
+  File recordingFile = SD.open("/recording.wav", FILE_READ);
+  if (!recordingFile) {
     Serial.println("Failed to open recording file");
     return false;
   }
+  Serial.println("Recording file opened");
 
-  // Prepare HTTP client
-  HTTPClient http;
-  http.begin(serverUrl);
-  http.addHeader("Content-Type", "audio/wav");
-
-  // Create a buffer to hold file data
-  const size_t bufferSize = 2048;
-  uint8_t buffer[bufferSize];
-
-  // Read file data into buffer and send in chunks
-  int bytesRead;
-  WiFiClient* stream = http.getStreamPtr();
-  while ((bytesRead = audioFile.read(buffer, bufferSize)) > 0) {
-    stream->write(buffer, bytesRead);
+  // Connect to the server
+  if (!client.connect(SERVER_IP, SERVER_PORT)) {
+    Serial.println("Connection to server failed");
+    return false;
   }
-  audioFile.close();
+  Serial.println("Connected to server");
 
-  // Get the response from the server
-  int httpResponseCode = http.POST("");
-  if (httpResponseCode > 0) {
-    Serial.printf("HTTP Response code: %d\n", httpResponseCode);
+  // Send HTTP POST request headers
+  client.println("POST /process-audio HTTP/1.1");
+  client.println("Host: 192.168.137.1");
+  client.println("Content-Type: audio/wav");
+  client.println("Transfer-Encoding: chunked");
+  client.println("Connection: close");
+  client.println();
 
-    // Open file to save the response
-    File responseFile = SD.open("/speech.mp3", FILE_WRITE);
-    if (!responseFile) {
-      Serial.println("Failed to open file for writing");
-      http.end();
-      return false;
-    }
+  // Send file data in chunks
+  const size_t bufferSize = 512;
+  uint8_t buffer[bufferSize];
+  size_t bytesRead;
+  while ((bytesRead = recordingFile.read(buffer, bufferSize)) > 0) {
+    client.print(String(bytesRead, HEX));
+    client.print("\r\n");
+    client.write(buffer, bytesRead);
+    client.print("\r\n");
+  }
+  recordingFile.close();
 
-    // Read the response stream and write to file
-    WiFiClient* responseStream = http.getStreamPtr();
-    while (responseStream->connected() || responseStream->available()) {
-      bytesRead = responseStream->readBytes(buffer, bufferSize);
-      if (bytesRead > 0) {
-        responseFile.write(buffer, bytesRead);
-      }
-    }
-    responseFile.close();
-    Serial.println("Response saved as /speech.mp3");
-  } else {
-    Serial.printf("Error code: %d\n", httpResponseCode);
-    http.end();
+  // Send final zero-length chunk
+  client.print("0\r\n\r\n");
+
+  // Receive response
+  Serial.println("Reading server response...");
+
+  // Read status line
+  unsigned long timeout = millis();
+  while (!client.available() && millis() - timeout < 30000);
+  if (!client.available()) {
+    Serial.println("Response timeout");
+    client.stop();
     return false;
   }
 
-  http.end();
+  String statusLine = client.readStringUntil('\n');
+  if (statusLine.indexOf("200 OK") == -1) {
+    Serial.print("Server error: ");
+    Serial.println(statusLine);
+    client.stop();
+    return false;
+  }
+
+  // Parse headers
+  int contentLength = 0;
+  while (client.connected()) {
+    String headerLine = client.readStringUntil('\n');
+    headerLine.trim();
+    if (headerLine.startsWith("Content-Length: ")) {
+      contentLength = headerLine.substring(16).toInt();
+    }
+    if (headerLine.isEmpty()) break;
+  }
+
+  if (contentLength <= 0) {
+    Serial.println("Invalid Content-Length");
+    client.stop();
+    return false;
+  }
+
+  // Create output file
+  File mp3File = SD.open("/speech.mp3", FILE_WRITE);
+  if (!mp3File) {
+    Serial.println("Failed to create MP3 file");
+    client.stop();
+    return false;
+  }
+
+  // Stream response to file
+  uint8_t recvBuffer[512];
+  size_t receivedTotal = 0;
+  unsigned long downloadStart = millis();
+
+  // Loop until we receive the full content or timeout occurs
+  while ((client.connected() || client.available()) && (receivedTotal < contentLength)) {
+    if (client.available()) {
+      size_t bytesToRead = min(sizeof(recvBuffer), contentLength - receivedTotal);
+      int bytesRead = client.read(recvBuffer, bytesToRead);
+      if (bytesRead > 0) {
+        mp3File.write(recvBuffer, bytesRead);
+        receivedTotal += bytesRead;
+        Serial.printf("Received %d bytes (Total: %d/%d)\n", bytesRead, receivedTotal, contentLength);
+      }
+    }
+    // Increase timeout to 60 seconds if necessary
+    if (millis() - downloadStart > 60000) {  
+      Serial.println("Download timeout");
+      break;
+    }
+  }
+
+  mp3File.close();
+  client.stop();
+
+  if (receivedTotal != contentLength) {
+    Serial.println("Incomplete download");
+    return false;
+  }
+
+  Serial.println("MP3 saved successfully");
   return true;
+}
+
+// Run processAIRequest in a separate FreeRTOS task
+void taskProcessAIRequest(void * parameter) {
+  aiRequestSuccess = processAIRequest();
+  aiRequestComplete = true;
+  vTaskDelete(NULL);
 }
 // Open ai End ------------------------------------
 
 // Recording Start ------------------------------
 void recordingSetup() {
   Serial.println("Initialize i2s");
+
+  disableAmplifier();
 
   I2SConfig config = i2sStream.defaultConfig(RX_MODE);
   config.i2s_format = I2S_STD_FORMAT;
@@ -241,9 +326,9 @@ void recordingSetup() {
   config.is_master = true;
   config.use_apll = false;
   // i2s pins used on ESP32
-  config.pin_bck = 14;
-  config.pin_ws = 15;
-  config.pin_data_rx = 21;  // input
+  config.pin_bck = MICROPHONE_BCK;
+  config.pin_ws = MICROPHONE_WS;
+  config.pin_data_rx = MICROPHONE_RX;  // input
   config.port_no = I2S_NUM_1;
 
   bool i2s_result = i2sStream.begin(config);
@@ -257,33 +342,16 @@ void recordingSetup() {
   }
 }
 
-void processRecordingRequest() {
-  Serial.println("Recording started...");
-
-  recordingSetup();
+// Disable amplifier outputs to reduce interference during recording
+void disableAmplifier() {
+  pinMode(I2S_DOUT, OUTPUT);
+  digitalWrite(I2S_DOUT, LOW);
   
-  String filename = "/recording.wav";
-
-  if (SD.exists(filename)) {
-    SD.remove(filename);
-  } 
-
-  audioFile = SD.open(filename, FILE_WRITE);
-  if (!audioFile) {
-    Serial.println("Recording Error -- Failed to open file for reading");
-  }
-
-  unsigned long startTime = millis();
-
-  while (millis() - startTime < recordDuration) {
-    copier.copy();
-    audioFile.flush();  // Force writing of data
-  }
-
-  Serial.println("Recording complete.");
-  out_stream.end();
-  i2sStream.end();
-  audioFile.close();
+  pinMode(I2S_BCLK, OUTPUT);
+  digitalWrite(I2S_BCLK, LOW);
+  
+  pinMode(I2S_LRC, OUTPUT);
+  digitalWrite(I2S_LRC, LOW);
 }
 // Recording End ----------------------------------
 
@@ -291,22 +359,12 @@ void processRecordingRequest() {
 void processPlayRequest() {
   Serial.println("Play speech.mp3");
 
-  pinMode(SD_CS, OUTPUT);
-  digitalWrite(SD_CS, HIGH);
-
-  Serial.println("Initializing SD card...");
-  SPI.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
-  if (!SD.begin(SD_CS)) {
-    Serial.println("SD initialization failed!");
-  }
-  Serial.println("SD initialization done.");
-
   playFile = SD.open("/speech.mp3");
   Serial.println(playFile.size());
 
   auto config = i2s.defaultConfig(TX_MODE);
   config.copyFrom(info);
-  config.i2s_format = I2S_LSB_FORMAT;
+  config.i2s_format = I2S_STD_FORMAT;
   config.pin_bck = I2S_BCLK;
   config.pin_ws = I2S_LRC;
   config.pin_data = I2S_DOUT;  // input
@@ -323,18 +381,56 @@ void processPlayRequest() {
 
 void stopPlayback() {
   Serial.println("Stopping playback.");
-  i2s.end();
+  // Allow the output copier to flush any remaining data
+  while (OutputCopier.copy()) {
+    delay(1); // yield time for internal buffers to flush
+  }
+  
+  // End the decoder and I2S stream after the last frame is processed.
   decoder.end();
+  i2s.end();
   if (playFile) {
     playFile.close();
   }
+}
+
+void startWaitPlayback() {
+  waitingFile = SD.open("/waiting.mp3");
+  if (!waitingFile) {
+    Serial.println("Failed to open waiting.mp3");
+    return;
+  }
+  auto config = i2s.defaultConfig(TX_MODE);
+  config.copyFrom(info);
+  config.i2s_format = I2S_STD_FORMAT;
+  config.pin_bck = I2S_BCLK;
+  config.pin_ws = I2S_LRC;
+  config.pin_data = I2S_DOUT;
+  // Use the same I2S port as speech playback
+  config.port_no = I2S_NUM_0;
+  waitingI2S.begin(config);
+  waitingDecoder.begin();
+  waitingOutputCopier.begin(waitingDecoder, waitingFile);
+  waitingPlaybackInitialized = true;
+  Serial.println("Started waiting playback");
+}
+
+void stopWaitPlayback() {
+  waitingOutputCopier.end();
+  waitingDecoder.end();
+  waitingI2S.end();
+  if (waitingFile) {
+    waitingFile.close();
+  }
+  waitingPlaybackInitialized = false;
+  Serial.println("Stopped waiting playback");
 }
 // Audio End-----------------------------------
 
 void setup() {
   // Serial port for debugging purposes
   Serial.begin(115200);
-  AudioToolsLogger.begin(Serial, AudioToolsLogLevel::Info);  
+  // AudioToolsLogger.begin(Serial, AudioToolsLogLevel::Info);  
   
   if (!initSD()) {
     ESP.restart();
@@ -345,30 +441,33 @@ void setup() {
   pass = readFile(passPath);
   Serial.print("SSID: "); Serial.print(ssid); Serial.print(" -- Password: "); Serial.println(pass);
 
-  if(initWiFi()) {
-    // Route for root / web page
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-      request->send(SD, "/index.html", "text/html", false, processor);
-    });
-    server.serveStatic("/", SD, "/");
-    
-    // Recording
-    server.on("/record", HTTP_GET, [](AsyncWebServerRequest *request) {
-      request->send(SD, "/index.html", "text/html", false, processor);
-      state = STATE_RECORD;
-    });
-    
-    server.on("/ai", HTTP_GET, [](AsyncWebServerRequest *request) {
-      request->send(SD, "/index.html", "text/html", false, processor);
-    });
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-    // Playing Audio
-    server.on("/play", HTTP_GET, [](AsyncWebServerRequest *request) {
-      request->send(SD, "/index.html", "text/html", false, processor);
-      state = STATE_PLAY;
-      playbackInitialized = false;
-    });
-    server.begin();
+  if(initWiFi()) {
+    // // Route for root / web page
+    // server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    //   request->send(SD, "/index.html", "text/html", false, processor);
+    // });
+    // server.serveStatic("/", SD, "/");
+    
+    // // Recording
+    // server.on("/record", HTTP_GET, [](AsyncWebServerRequest *request) {
+    //   request->send(SD, "/index.html", "text/html", false, processor);
+    //   state = STATE_RECORD;
+    // });
+    
+    // server.on("/ai", HTTP_GET, [](AsyncWebServerRequest *request) {
+    //   request->send(SD, "/index.html", "text/html", false, processor);
+    //   state = STATE_AI;
+    // });
+
+    // // Playing Audio
+    // server.on("/play", HTTP_GET, [](AsyncWebServerRequest *request) {
+    //   request->send(SD, "/index.html", "text/html", false, processor);
+    //   state = STATE_PLAY;
+    //   playbackInitialized = false;
+    // });
+    // server.begin();
   }
   else {
     // Connect to Wi-Fi network with SSID and password
@@ -419,41 +518,88 @@ void setup() {
 }
 
 void loop() {
+  static unsigned long lastDebounceTime = 0;
+  static bool buttonActive = false;
+  
+  // Button pressed to start/stop recording
+  if (digitalRead(BUTTON_PIN) == LOW) {
+    if (!buttonActive && (millis() - lastDebounceTime > 50)) {
+      recordingSetup();
+      buttonActive = true;
+      lastDebounceTime = millis();
+      if (state == STATE_IDLE) {
+        state = STATE_RECORD;
+        isRecording = true;
+        Serial.println("Starting recording...");
+      }
+    }
+  } else {
+    if (buttonActive) {
+      buttonActive = false;
+      if (isRecording) {
+        isRecording = false;
+        Serial.println("Stopping recording...");
+        out_stream.end();
+        i2sStream.end();
+        audioFile.close();
+        // Transition to AI state and start asynchronous AI request task
+        state = STATE_AI;
+        aiRequestComplete = false;
+        xTaskCreatePinnedToCore(taskProcessAIRequest, "AI_Task", 8192, NULL, 1, NULL, 1);
+      }
+    }
+  }
+  
+  // State machine handling
   switch (state) {
-    case STATE_RESET: {
+    case STATE_RESET:
       Serial.println("Reset State");
       state = STATE_IDLE;
+      break;
+      
+    case STATE_IDLE:
+      // Do nothing
+      break;
+      
+    case STATE_RECORD:
+      if (!audioFile) {
+        String filename = "/recording.wav";
+        if (SD.exists(filename)) SD.remove(filename);
+        audioFile = SD.open(filename, FILE_WRITE);
+      }
+      if (isRecording) {
+        copier.copy();
+        audioFile.flush();
       }
       break;
-
-    case STATE_IDLE: {
+      
+    case STATE_AI:
+      // In STATE_AI, run waiting sound playback while the AI task is running.
+      if (!waitingPlaybackInitialized) {
+        startWaitPlayback();
+      }
+      // Drive waiting playback copy – if the file finishes, loop it.
+      if (!waitingOutputCopier.copy()) {
+        waitingFile.close();
+        waitingFile = SD.open("/waiting.mp3");
+        waitingOutputCopier.begin(waitingDecoder, waitingFile);
+      }
+      // When the asynchronous AI request finishes, stop waiting playback and transition to STATE_PLAY.
+      if (aiRequestComplete) {
+        stopWaitPlayback();
+        state = STATE_PLAY;
       }
       break;
-    
-    case STATE_RECORD: {
-      processRecordingRequest();
-      state = STATE_AI;
-      }
-      break;
-
-    case STATE_AI: {
-      processAIRequest();
-      state = STATE_PLAY;
-      playbackInitialized = false;
-      }
-      break;
-
-    case STATE_PLAY: {  
-      // Initialize playback only once when entering STATE_PLAY
+      
+    case STATE_PLAY:
       if (!playbackInitialized) {
         Serial.println("Start Playing Response");
         processPlayRequest();
         playbackInitialized = true;
       }
-    }
       break;
   }
-
+  
   if (state == STATE_PLAY && playbackInitialized) {
     if (!OutputCopier.copy()) {
       stopPlayback();

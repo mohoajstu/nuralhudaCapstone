@@ -32,6 +32,7 @@ body {
   display: grid; 
   grid-gap: 2rem; 
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  margin-top: 15px;
 }
 
 .card { 
@@ -88,7 +89,7 @@ label {
 button {
   border: none;
   color: #FEFCFB;
-  padding: 15px 32px;
+  padding: 15px;
   text-align: center;
   font-size: 16px;
   width: 100px;
